@@ -1,210 +1,152 @@
-use sbccd
+USE [sbccd];
 
-UPDATE report.AgendaReportLayout
-SET AttributesJson = '{
-  "ListNumberStrategy": [
-    { "Id": 1, "Level": 0, "NumberStyle": "roman", "UpperCase": 1 },
-    { "Id": 2, "Level": 1, "NumberStyle": "alpha", "UpperCase": 0 },
-    { "Id": 3, "Level": 2, "NumberStyle": "NONE", "UpperCase": 0 }
-  ]
-}
-'
-WHERE Id = 2
+/*
+   Commit
+									Rollback
+*/
 
-UPDATE report.AgendaReportSection
-SET AttributesJson = '[{"Key":"valign","Value":"top"},{"Key":"colspan","Value":"2"}]'
-WHERE Id = 18
+DECLARE @JiraTicketNumber nvarchar(20) = 'MS-15528';
+DECLARE @Comments nvarchar(Max) = 
+	'Update Agenda Report';
+DECLARE @Developer nvarchar(50) = 'Nathan Westergard';
+DECLARE @ScriptTypeId int = 1; /*  Default 1 is Support,  
+For a complete list run the following query
 
-UPDATE report.AgendaReportQuery
-SET QueryText = '
-SET @_entityData =( 
-SELECT c.Id AS [Id],
-(
-	CASE 
-		WHEN C.[IsDistanceEd] IS NULL or C.[IsDistanceEd] = 0 
-			THEN dbo.fnHtmlStandardSimplefield(''Distance Ed'',''No'', NULL, NULL, '': '', 0 )
-			ELSE dbo.fnHtmlStandardSimplefield(''Distance Ed'',''<span class="text-danger">Yes</span>'', NULL, NULL, '': '', 0 ) 
-		END ) AS [DistanceEd],
-( 
-	CASE 
-		WHEN (C.[IsDistanceEd] IS NULL or C.[IsDistanceEd] = 0) and ( (C.[IsSharedSCC] IS NULL or C.[IsSharedSCC] = 0) or (C.[IsShowFieldTrip] IS NULL or C.[IsShowFieldTrip] = 0) or (GB.[Bit04] IS NULL or GB.[Bit04] = 0 ) )
-			THEN '''' 
-			ELSE dbo.fnHtmlStandardSimplefield(''Delivery Method'',
-				concat(
-					case
-						when C.[IsSharedSCC] = 1 
-							then ''Fully Online'' 
-							else '''' 
-						end,
-							case 
-								when C.[IsSharedSCC] = 1 and (C.[IsShowFieldTrip] = 1 or GB.[Bit04] = 1) 
-									then '', '' 
-									else '''' 
-								end,
-									case 
-										when C.[IsShowFieldTrip] = 1
-										then ''Partially Online''
-										else '''' 
-										end,
-									case 
-									when C.[IsShowFieldTrip] = 1 and GB.[Bit04] = 1
-									then '', '' 
-									else '''' 
-									end,
-								case 
-									when GB.[Bit04] = 1 
-									then ''Online with In-Person Proctored Assessments'' 
-									else ''''
-									end)
-, NULL, NULL, '': '', 0 ) END ) AS [DeliveryMethod]
-FROM [course] c 
-INNER JOIN [GenericBit] GB ON c.Id = GB.courseId
-INNER JOIN @entity e ON c.Id = e.[EntityId] AND c.Id = @entityId
-FOR JSON AUTO ); 
+Select * from history.ScriptType
+*/
 
-SET @_entitySummary = ( 
-	SELECT CONCAT( dbo.fnHtmlOpenTag( ''div'', [dbo].[fnHtmlConcatTagAttributes](''[{"Key":"class","Value":"section"},{"Key":"title","Value":"Course Basics"}]'', 0 ) ), 
-	[DistanceEd],[DeliveryMethod], dbo.fnHtmlCloseTag(''div'') ) 
-	FROM OPENJSON(@_entityData)
-	WITH ( [DistanceEd] nvarchar(max) ''$.DistanceEd'', [DeliveryMethod]  nvarchar(max) ''$.DeliveryMethod'') ); 
-	
-	SELECT ( CASE WHEN @_entitySummary IS NULL THEN '' '' ELSE @_entitySummary END ) AS [Text], @entityId AS [Value];
-'
-WHERE Id = 12
+SELECT
+ @@servername AS 'Server Name' 
+,DB_NAME() AS 'Database Name'
+,@JiraTicketNumber as 'Jira Ticket Number';
 
-UPDATE report.AgendaReportQuery
-SET QueryText = '
+SET XACT_ABORT ON
+BEGIN TRAN
 
-SET @_entityData =
-	(
-	SELECT 
-		  t.Id AS [Id]
-		, t.ReqTypeId AS [ReqTypeId]
-		, CONCAT
-			( 
-			  dbo.fnHtmlOpenTag(''div'', dbo.fnHtmlAttribute(''class'',''reqtype-title''))
-			, ''<span class="text-danger">'',
-			t.ReqTypeTitle,
-			''</span>''
-			, dbo.fnHtmlCloseTag(''div'')
-			, dbo.ConcatOrdered_Agg(t.cr_Id, t.ReqText, 1)
-			) AS [ReqText] 
-	FROM 
-		(
-		SELECT 
-			  c1.Id AS [Id]
-			, rt.Id AS [ReqTypeId]
-			, cr.Id AS [cr_Id]
-			, COALESCE(rt.Title, ''No Requisite Type'') AS [ReqTypeTitle]
-			, CONCAT
-				(
-				  dbo.fnHtmlOpenTag(''div'', dbo.fnHtmlAttribute(''class'', ''req-text''))
-				, CONCAT
-					( 
-					  -- Requisite Type list items -- 
-					  (
-					  CASE	
-					  /* 
-					  When Subject and Requisite Course are chosen from dropdowns, 
-					  and Requisite Comment textarea is filled out:
-					  Show requisite course entity title and comment text
-					  */
-					  WHEN cr.Requisite_CourseId IS NOT NULL AND cr.EntrySkill IS NOT NULL 
-					  THEN dbo.fnHtmlElement(''span'', CONCAT(c2.EntityTitle, '' - '', cr.EntrySkill), NULL)					  
-					  /* 
-					  When Subject and Requisite Course are chosen from dropdowns, 
-					  but Requisite Comment textarea is blank: 
-					  Show requisite course entity title 
-					  */
-					  WHEN cr.Requisite_CourseId IS NOT NULL AND cr.EntrySkill IS NULL
-					  THEN dbo.fnHtmlElement(''span'', c2.EntityTitle, NULL) 					  				  
-					  /* 
-					  When Subject and Requisite Course dropdowns are blank, 
-					  but Requisite Comment textarea is filled out:
-					  Show comment text
-					  */
-					  WHEN cr.Requisite_CourseId IS NULL AND cr.EntrySkill IS NOT NULL 
-					  THEN dbo.fnHtmlElement(''span'', cr.EntrySkill, NULL)					  
-					  END
-					  )
-					  -- Non-Course Requirement list items -- 
-					, (
-					  CASE				  
-					  /* 
-					  When Non-Course Requirement textarea is filled out:
-					  Show NCR text
-					  */
-					  WHEN cr.CourseRequisiteComment IS NOT NULL 
-					  THEN dbo.fnHtmlElement(''span'', cr.CourseRequisiteComment, NULL) 					  
-					  END
-					  )
-					)
-				, dbo.fnHtmlCloseTag(''div'') 
-				) AS [ReqText] 
-		FROM Course c1 
-			INNER JOIN CourseRequisite cr ON c1.Id = cr.CourseId
-			LEFT JOIN Course c2 ON cr.Requisite_CourseId = c2.Id
-			LEFT JOIN Subject s ON s.Id = c2.SubjectId 
-			LEFT JOIN StatusAlias sa ON sa.Id = c2.StatusAliasId
-			INNER JOIN RequisiteType rt ON cr.RequisiteTypeId = rt.Id
-			INNER JOIN @entity e ON c1.Id = e.EntityId AND c1.Id = @entityId 
-		) AS t 
-	GROUP BY Id, ReqTypeId, ReqTypeTitle
-	FOR JSON AUTO 
-	) 
-SET @_entitySummary = 
-	(
-	SELECT 
-		CONCAT
-			(
-			  dbo.fnHtmlOpenTag(''div'', dbo.fnHtmlConcatTagAttributes(''[{"Key":"class","Value":"section"},{"Key":"title","Value":"Course Requisites"}]'', 0))
-			, CASE 
-			  WHEN dbo.Concat_Agg([ReqText]) IS NULL 
-			  THEN '''' 
-			  ELSE dbo.fnHtmlStandardSimplefield(''<span class="text-danger"><b>Requisites</b></span>'', dbo.Concat_Agg([ReqText]), NULL, NULL, '': '', 0) 
-			  END
-			, dbo.fnHtmlCloseTag(''div'') 
-			) 
-	FROM OPENJSON(@_entityData) 
-	WITH ([ReqText] NVARCHAR(MAX) ''$.ReqText'') 
+If exists(select top 1 1 from History.ScriptsRunOnDatabase where TicketNumber = @JiraTicketNumber and Developer = @Developer and Comments = @Comments)
+	THROW 51000, 'This Script has already been run', 1;
+
+INSERT INTO History.ScriptsRunOnDatabase
+(TicketNumber,Developer,Comments,ScriptTypeId)
+VALUES
+(@JiraTicketNumber, @Developer, @Comments, @ScriptTypeId); 
+
+/*--------------------------------------------------------------------
+Please do not alter the script above this comment  except to set
+the Use statement and the variables. 
+
+Notes:  
+	1.   In comments put a brief description of what the script does.
+         You can also use this to document if we are doing somehting 
+		 that is against meta best practices but the client is 
+		 insisting on, and that the client has been made aware of 
+		 the potential consequences
+	2.   ScriptTypeId
+		 Note:  For Pre and Post Deploy we should follow the following 
+		 script naming convention Release Number/Ticket Number/either the word Predeploy or PostDeploy
+		 Example: Release3.103.0_DST-4645_PostDeploy.sql
+
+-----------------Script details go below this line------------------*/
+-- configuration (new) 
+	update Report.AgendaReportEntityGroup
+	set UpperCaseTitle = 1
+	, [UsePluralTitleForProposalType] = 1
+	, DisplayLevelIndentation = 0
+
+-- make the font size bigger for the proposal type and reduce the colspan to 1 instead of 2. The colspan is one now to remove the two columns for the entity where the first column is the marker (e.g. 1) 
+	update g
+	set AttributesJson = '[{"Key":"colspan","Value":"1"}, {"Key":"style","Value":"font-size: 14pt"}]'
+	from Report.AgendaReportEntityGroup g
+	where id = 1
+
+-- add plural title to the DE proposal type.
+	update pt
+	set pt.PluralTitle = 'DE Additions ONLY'
+	from ProposalType pt
+	where Title = 'DE Addition ONLY'
+
+-- Turns off the numebering for proposal types and sets the numbering for entities to 'alpha'
+	update ar
+	set AttributesJson = '
+	{
+		"ListNumberStrategy": [
+			{
+				"Id": 1,
+				"Level": 0,
+				"NumberStyle": "roman"
+			},
+			{
+				"Id": 2,
+				"Level": 1,
+				"NumberStyle": "none"
+			},
+			{
+				"Id": 3,
+				"Level": 2,
+				"NumberStyle": "alpha"
+			}
+		]
+	}
+	'
+	from Report.AgendaReportLayout ar
+	where Id = 2
+
+
+-- remove the indentation of the entities
+	-- Key: #level-2 .section, #level-2 > td > span
+	update Report.AgendaReportAttribute
+	set [Value] = 'margin-left: 0pt'
+	where id = 10;
+
+	update Report.AgendaReportAttribute
+	set [key] = '.reqtype-title' -- before: .field-wrapper,.reqtype-title
+	where id = 16;
+
+	-- Key: .field-wrapper-first-child
+	update Report.AgendaReportAttribute
+	set [Value] = 'margin-left: 0pt;'
+	where Id = 15
+
+-- remove numbering from the first column and add numbering inside the entity (Courses)
+	delete
+	from Report.[AgendaReportQueryMapping]
+	where AgendaReportQueryId = 3
+	and EntityTypeId = 1
+
+	update Report.AgendaReportQuery
+	set QueryText = '
+	SET @_entityData = (
+		SELECT c.Id AS [Id],
+		( CASE WHEN c.[Title] IS NULL THEN '''' ELSE dbo.fnHtmlField(''div'', ''span'',''span'', dbo.fnHtmlElement(''span'', ''Title'', NULL), CONCAT(@_entityTitle,'' '',''''), ''{ "Key" :"class", "Value" :"field-wrapper-first-child" }'', NULL, NULL, '': '', 0) END ) AS [Title],
+		( 
+			CASE 
+				WHEN s.[Title] IS NULL THEN '''' 
+				ELSE dbo.fnHtmlStandardSimplefield(
+					concat(lower(@_entityNumber), ''Course Subject/Number''),
+					CONCAT(''(<a href="https://sbccd.curriqunet.com/DynamicReports/AllFieldsReportByEntity/'',C.id,''?entityType=Course&reportId=337">'',s.[Title],'' '', C.[CourseNumber], ''</a>)''), NULL, NULL, '': '', 0
+				)
+				END 
+		) AS [Subject],
+		( CASE WHEN C.[Rationale] IS NULL THEN '''' ELSE dbo.fnHtmlStandardSimplefield(''Rationale'', coalesce(GMT.TextMax06,C.Rationale), NULL, NULL, '': '', 0 ) END ) AS [Rationale] 
+		FROM [course] c 
+			inner join GenericMaxText GMT on C.id = GMT.CourseId 
+			INNER JOIN [subject] s ON c.SubjectId = s.Id 
+			INNER JOIN @entity e ON c.Id = e.[EntityId] 
+			AND c.Id = @entityId 
+		FOR JSON AUTO
 	);
-SELECT 
-	  (
-	  CASE 
-	  WHEN @_entitySummary IS NULL 
-	  THEN '' '' 
-	  ELSE @_entitySummary 
-	  END
-	  ) AS [Text]
-	, @entityId AS [Value];
 
-'
-WHERE Id = 5
+	SET @_entitySummary = ( SELECT CONCAT( dbo.fnHtmlOpenTag( ''div'', [dbo].[fnHtmlConcatTagAttributes](''[{"Key":"class","Value":"section"},{"Key":"title","Value":"Course Basics"}]'', 0 ) ), [Subject], [Title],[Rationale], dbo.fnHtmlCloseTag(''div'') ) FROM OPENJSON(@_entityData) WITH ( [Subject] nvarchar(max) ''$.Subject'',[Title] nvarchar(max) ''$.Title'',[Rationale] nvarchar(max) ''$.Rationale'' ) ); SELECT ( CASE WHEN @_entitySummary IS NULL THEN '' '' ELSE @_entitySummary END ) AS [Text], @entityId AS [Value];
+	'
+	where Id = 4
+
+-- remove numbering from the first column and add numbering inside the entity (Programs) 
+	delete from Report.AgendaReportQueryMapping
+	where id = 3
 
 
-UPDATE report.AgendaReportSection
-SET Title = 'Call to Order/Committee Members'
-WHERE Id = 14
-
-UPDATE report.AgendaReportSection
-SET Title = 'Action Items'
-, SortOrder = 3
-WHERE Id = 18
-
-UPDATE report.AgendaReportSection
-SET Title = 'Operational Issues'
-, SortOrder = 4
-WHERE Id = 22
-
-UPDATE report.AgendaReportSection
-SET SortOrder = 3
-WHERE Id = 23
-
-delete from report.AgendaReportLayoutMapping
-WHERE AgendaReportSectionId in (16, 17, 19, 20, 21, 24)
-
-delete from report.AgendaReportQueryMapping
-WHERE AgendaReportSectionId in (16, 17, 19, 20, 21, 24)
-
-delete FROM report.AgendaReportSection
-WHERE Id in (16, 17, 19, 20, 21, 24)
+	update Report.AgendaReportQuery
+	set QueryText = '
+	SET @_entityData =( SELECT p.[Id] AS [Id], dbo.fnHtmlField( ''div'', ''span'', ''span'', dbo.fnHtmlElement(''span'', concat(lower(@_entityNumber), ''Program Title''), NULL), concat(''<a href="https://sbccd.curriqunet.com/DynamicReports/AllFieldsReportByEntity/'',P.id,''?entityType=Program&reportId=355">'',@_entityTitle, ''</a>''), ''{ "Key" :"class", "Value" :"field-wrapper-first-child" }'', NULL, NULL, '': '', 0) AS [Title],( CASE WHEN oe.[Title] IS NULL THEN '''' ELSE dbo.fnHtmlStandardSimplefield(''Discipline'', oe.[Title], null, null, '': '', 0) END ) AS [Discipline], ( CASE WHEN at.[Title] IS NULL THEN '''' ElSE dbo.fnHtmlStandardSimplefield(''Award Type'', at.[Title], null, null, '': '', 0) END ) AS [AwardType] FROM [program] p INNER JOIN OrganizationEntity oe ON p.[Tier1_OrganizationEntityId] = oe.[Id] INNER JOIN AwardType at ON p.[AwardTypeId] = at.[Id] INNER JOIN @entity e ON p.[Id] = e.[EntityId] and p.[Id] = @entityId FOR JSON AUTO ) SET @_EntitySummary = ( SELECT CONCAT( dbo.fnHtmlOpenTag( ''div'', [dbo].[fnHtmlConcatTagAttributes]( ''[{"Key":"class","Value":"section"},{"Key":"title","Value":"Program Basics"}]'', 0 ) ), [Title], [Discipline], [AwardType], dbo.fnHtmlCloseTag(''section'') ) FROM OPENJSON(@_entityData) with ( [Title] nvarchar(max) ''$.Title'', [Discipline] nvarchar(max) ''$.Discipline'', [AwardType] nvarchar(max) ''$.AwardType'' ) ) SELECT ( CASE WHEN @_entitySummary IS NULL THEN '' '' ELSE @_entitySummary END ) AS [Text], @entityId AS [Value];
+	'
+	where id = 7
