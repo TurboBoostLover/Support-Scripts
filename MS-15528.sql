@@ -59,12 +59,6 @@ Notes:
 	from Report.AgendaReportEntityGroup g
 	where id = 1
 
--- add plural title to the DE proposal type.
-	update pt
-	set pt.PluralTitle = 'DE Additions ONLY'
-	from ProposalType pt
-	where Title = 'DE Addition ONLY'
-
 -- Turns off the numebering for proposal types and sets the numbering for entities to 'alpha'
 	update ar
 	set AttributesJson = '
@@ -150,3 +144,53 @@ Notes:
 	SET @_entityData =( SELECT p.[Id] AS [Id], dbo.fnHtmlField( ''div'', ''span'', ''span'', dbo.fnHtmlElement(''span'', concat(lower(@_entityNumber), ''Program Title''), NULL), concat(''<a href="https://sbccd.curriqunet.com/DynamicReports/AllFieldsReportByEntity/'',P.id,''?entityType=Program&reportId=355">'',@_entityTitle, ''</a>''), ''{ "Key" :"class", "Value" :"field-wrapper-first-child" }'', NULL, NULL, '': '', 0) AS [Title],( CASE WHEN oe.[Title] IS NULL THEN '''' ELSE dbo.fnHtmlStandardSimplefield(''Discipline'', oe.[Title], null, null, '': '', 0) END ) AS [Discipline], ( CASE WHEN at.[Title] IS NULL THEN '''' ElSE dbo.fnHtmlStandardSimplefield(''Award Type'', at.[Title], null, null, '': '', 0) END ) AS [AwardType] FROM [program] p INNER JOIN OrganizationEntity oe ON p.[Tier1_OrganizationEntityId] = oe.[Id] INNER JOIN AwardType at ON p.[AwardTypeId] = at.[Id] INNER JOIN @entity e ON p.[Id] = e.[EntityId] and p.[Id] = @entityId FOR JSON AUTO ) SET @_EntitySummary = ( SELECT CONCAT( dbo.fnHtmlOpenTag( ''div'', [dbo].[fnHtmlConcatTagAttributes]( ''[{"Key":"class","Value":"section"},{"Key":"title","Value":"Program Basics"}]'', 0 ) ), [Title], [Discipline], [AwardType], dbo.fnHtmlCloseTag(''section'') ) FROM OPENJSON(@_entityData) with ( [Title] nvarchar(max) ''$.Title'', [Discipline] nvarchar(max) ''$.Discipline'', [AwardType] nvarchar(max) ''$.AwardType'' ) ) SELECT ( CASE WHEN @_entitySummary IS NULL THEN '' '' ELSE @_entitySummary END ) AS [Text], @entityId AS [Value];
 	'
 	where id = 7
+
+INSERT INTO OrganizationSubject
+(OrganizationEntityId, SubjectId, StartDate)
+VALUES
+(185, 211, GETDATE())
+
+UPDATE ProposalType 
+SET PluralTitle = CONCAT(Title, 's')
+WHERE Active = 1
+and Id not in (148, 149, 150, 152, 171, 172, 173, 174, 175, 176)
+
+UPDATE ProposalType
+SET PluralTitle = 'DE Additions ONLY'
+WHERE Id = 148
+
+UPDATE ProposalType
+SET PluralTitle = 'New Courses - Honors'
+WHERE Id = 149
+
+UPDATE ProposalType
+SET PluralTitle = 'Modify Courses - Honors'
+WHERE Id = 150
+
+UPDATE ProposalType
+SET PluralTitle = 'Deactivate Courses - Honors'
+WHERE Id = 152
+
+UPDATE ProposalType
+SET PluralTitle = 'Program Reviews - Year 1'
+WHERE Id = 171
+
+UPDATE ProposalType
+SET PluralTitle = 'Program Reviews - Year 2'
+WHERE Id = 172
+
+UPDATE ProposalType
+SET PluralTitle = 'Program Reviews - Year 3'
+WHERE Id = 173
+
+UPDATE ProposalType
+SET PluralTitle = 'Program Reviews - Year 4'
+WHERE Id = 174
+
+UPDATE ProposalType
+SET PluralTitle = 'Program Reviews - Year 5'
+WHERE Id = 175
+
+UPDATE ProposalType
+SET PluralTitle = 'Program Reviews - Year 6'
+WHERE Id = 176

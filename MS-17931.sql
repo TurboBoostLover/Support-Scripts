@@ -2,12 +2,12 @@ USE [hkapa];
 
 /*
    Commit
-					Rollback
+									Rollback
 */
 
 DECLARE @JiraTicketNumber nvarchar(20) = 'MS-17931';
 DECLARE @Comments nvarchar(Max) = 
-	'Update Specializations to Specialisations';
+	'Update Field and Section names and descriptions';
 DECLARE @Developer nvarchar(50) = 'Nathan Westergard';
 DECLARE @ScriptTypeId int = 1; /*  Default 1 is Support,  
 For a complete list run the following query
@@ -47,77 +47,31 @@ Notes:
 		 Example: Release3.103.0_DST-4645_PostDeploy.sql
 
 -----------------Script details go below this line------------------*/
-Declare @clientId int =1, -- SELECT Id, Title FROM Client 
-	@Entitytypeid int =2; -- SELECT * FROM EntityType (1 = course, 2 = program, 6 = module)
+DECLARE @Fields INTEGERS
 
-declare @templateId integers
+UPDATE MetaSelectedField 
+SET DisplayName = REPLACE (DisplayName, 'Specializations', 'Specialisations')
+output inserted.MetaSelectedFieldId INTO @Fields
+WHERE LabelVisible = 1 and DisplayName like '%Specializations%'
 
-INSERT INTO @templateId
-SELECT mt.MetaTemplateId
-FROM MetaTemplateType mtt
-    INNER JOIN MetaTemplate mt ON mtt.MetaTemplateTypeId = mt.MetaTemplateTypeId
-WHERE mt.Active = 1 
-    AND mtt.EntityTypeId = @entityTypeId
-    AND mt.IsDraft = 0
-    AND mt.EndDate IS NULL
-    AND mtt.Active = 1
-    AND mtt.IsPresentationView = 0	--comment out if doing reports and forms
-    AND mtt.ClientId = @clientId
-		--AND mtt.MetaTemplateTypeId in ()		--comment back in if just doing some of the mtt's
+UPDATE MetaSelectedField 
+SET DisplayName = REPLACE (DisplayName, 'Specialization', 'Specialisation')
+output inserted.MetaSelectedFieldId INTO @Fields
+WHERE LabelVisible = 1 and DisplayName like '%Specialization%'
 
-declare @FieldCriteria table (
-	TabName nvarchar(255) index ixRecalcFieldCriteria_TabName,
-	TableName sysname index ixRecalcFieldCriteria_TableName,
-	ColumnName sysname index ixRecalcFieldCriteria_ColumnName,
-	Action nvarchar(max)
-);
-/************************* Put fields Here ***********************
-*************************Only Edit Values************************/
-insert into @FieldCriteria (TabName, TableName, ColumnName,Action)
-values
-('General Programme Information', 'ProgramLookup14', 'Lookup14Id','1')
+UPDATE MetaSelectedSection
+SET SectionName = REPLACE (SectionName, 'Specialization', 'Specialisation')
+WHERE SectionName like '%Specialization%'
 
-declare @Fields table (
-	FieldId int primary key,
-	SectionId int,
-	Action nvarchar(max),
-	TabId int,
-	TemplateId int,
-	sortorder int,
-	mtt int
-);
+UPDATE mt
+SET LastUpdatedDate = GETDATE()
+FROM MetaTemplate AS mt
+INNER JOIN MetaSelectedSection AS mss on mss.MetaTemplateId = mt.MetaTemplateId
+INNER JOIN MetaSelectedField AS msf on msf.MetaSelectedSectionId = mss.MetaSelectedSectionId
+INNER JOIN @Fields AS f on msf.MetaSelectedFieldId = f.Id
 
-insert into @Fields (FieldId,SectionId,Action,TabId,TemplateId,sortorder, mtt)
-select msf.metaselectedfieldid,msf.MetaSelectedSectionId,rfc.Action,mss.MetaSelectedSectionId,mss.MetaTemplateId ,msf.RowPosition, mt.MetaTemplateTypeId
-from MetaTemplate mt
-inner join MetaSelectedSection mss
-	on mt.MetaTemplateId = mss.MetaTemplateId
-inner join MetaSelectedSection mss2
-	on mss.MetaSelectedSectionId = mss2.MetaSelectedSection_MetaSelectedSectionId
-inner join MetaSelectedField msf
-	on mss2.MetaSelectedSectionId = msf.MetaSelectedSectionId
-inner join MetaAvailableField maf
-	on msf.MetaAvailableFieldId = maf.MetaAvailableFieldId
-inner join @FieldCriteria rfc
-	on ( maf.TableName = rfc.TableName and maf.ColumnName = rfc.ColumnName and rfc.TabName = mss.SectionName)		--uncomment tab name if tempalate have different tab name (likely in reports)
-where mt.MetaTemplateId  in (select * from @templateId)
-
-/********************** Changes go HERE **************************************************/
-UPDATE MetaSelectedField
-SET DisplayName = 'Specialisations'
-WHERE MetaSelectedFieldId in (
-	SELECT FieldId FROM @Fields
-)
-
-
-/****************************** update templates ******************************************/
-update MetaTemplate
-set LastUpdatedDate = getdate()
-where MetaTemplateId in (select Distinct templateId FROM @Fields)
-
---exec EntityExpand @clientId =3 , @entityTypeId =2
-
---exec upUpdateEntitySectionSummary @entityTypeId = 1, @templateId = EnterMetaTemplateIdHere, @entityId = null; --badge update
-
---commit
---rollback
+UPDATE mt
+SET LastUpdatedDate = GETDATE()
+FROM MetaTemplate AS mt
+INNER JOIN MetaSelectedSection AS mss on mss.MetaTemplateId = mt.MetaTemplateId
+WHERE mss.MetaBaseSchemaId in (3684, 7134)

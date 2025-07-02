@@ -7,7 +7,7 @@ USE [mdc];
 
 DECLARE @JiraTicketNumber nvarchar(20) = 'MS-17213';
 DECLARE @Comments nvarchar(Max) = 
-	'Move data for DST-5038';
+	'Dlete PickList fields';
 DECLARE @Developer nvarchar(50) = 'Nathan Westergard';
 DECLARE @ScriptTypeId int = 1; /*  Default 1 is Support,  
 For a complete list run the following query
@@ -47,60 +47,45 @@ Notes:
 		 Example: Release3.103.0_DST-4645_PostDeploy.sql
 
 -----------------Script details go below this line------------------*/
-SELECT DISTINCT mtt.EntityTypeId, msf.MetaForeignKeyLookupSourceId, msf.DisplayName, mss2.SectionName FROM MetaSelectedField AS msf
-INNER JOIN MetaSelectedSection AS mss on msf.MetaSelectedSectionId = mss.MetaSelectedSectionId
-INNER JOIN MetaSelectedSection AS mss2 on mss.MetaSelectedSection_MetaSelectedSectionId = mss2.MetaSelectedSectionId
-INNER JOIN MetaTemplate AS mt on mss.MetaTemplateId = mt.MetaTemplateId
-INNER JOIN MetaTemplateType AS mtt on mt.MetaTemplateTypeId = mtt.MetaTemplateTypeId
-WHERE MetaAvailableFieldId in (2916, 2917, 2941)
+DECLARE @Fields INTEGERS
+INSERT INTO @Fields
+SELECT mss.MetaTemplateId fROM MetaSelectedField AS msf
+INNER JOIN MetaSelectedSection As mss on msf.MetaSelectedSectionId = mss.MetaSelectedSectionId
+wHERE msf.MetaAvailableFieldId in (2916, 2917, 2941)
 
---SELECT * FROM Client
+DELETE FROM MetaDisplaySubscriber WHERE MetaSelectedFieldId in (
+	SELECT MetaSelectedFieldId FROM MetaSelectedField WHERE MetaAvailableFieldId in (
+		2916, 2917, 2941
+	)
+)
 
---SELECT * FROM MetaSelectedField WHERE MetaAvailableFieldId in (2916)
---SELECT * FROM MetaAvailableField WHERE MetaAvailableFieldId in (2916)
---SELECT * FROM MetaForeignKeyCriteriaBase WHERE Id in (242, 243)
+DELETE FROM MetaDisplaySubscriber WHERE MetaDisplayRuleId in (
+	SELECT Id FROM MetaDisplayRule WHERE MetaSelectedFieldId in (
+		SELECT MetaSelectedFieldId FROM MetaSelectedField WHERE MetaAvailableFieldId in (
+		2916, 2917, 2941
+	)
+	)
+)
 
---SELECT * FROM Program
+DELETE FROM ExpressionPart WHERE Operand1_MetaSelectedFieldId in (
+		SELECT MetaSelectedFieldId FROM MetaSelectedField WHERE MetaAvailableFieldId in (
+		2916, 2917, 2941
+	)
+)	
 
-DECLARE @Templates INTEGERS
-INSERT INTO @Templates
-SELECT DISTINCT mss.MetaTemplateId FROM MetaSelectedField AS msf
-INNER JOIN MetaSelectedSection AS mss on msf.MetaSelectedSectionId = mss.MetaSelectedSectionId
-INNER JOIN MetaSelectedSection AS mss2 on mss.MetaSelectedSection_MetaSelectedSectionId = mss2.MetaSelectedSectionId
-INNER JOIN MetaTemplate AS mt on mss.MetaTemplateId = mt.MetaTemplateId
-INNER JOIN MetaTemplateType AS mtt on mt.MetaTemplateTypeId = mtt.MetaTemplateTypeId
-WHERE MetaAvailableFieldId in (2916, 2917, 2941)
+DELETE FROM MetaDisplayRule
+WHERE MetaSelectedFieldId in (
+	SELECT MetaSelectedFieldId FROM MetaSelectedField WHERE MetaAvailableFieldId in (
+		2916, 2917, 2941
+	)
+)
 
-UPDATE MetaSelectedField
-SET MetaAvailableFieldId = 3393
-WHERE MetaAvailableFieldId = 2916
 
-UPDATE MetaSelectedField
-SET MetaAvailableFieldId = 3394
-WHERE MetaAvailableFieldId = 2917
-
-UPDATE MetaSelectedField
-SET MetaAvailableFieldId = 13331
-WHERE MetaAvailableFieldId = 2941
-
---SELECT * FROM MetaAvailableField WHERE MetaAvailableFieldId in (13331)
-
-UPDATE CourseYesNo
-SET YesNo17Id = CASE WHEN p.PickListYes_No01Id = 97 THEN 1 WHEN p.PickListYes_No01Id = 98 THEN 2 WHEN p.PickListYes_No01Id = 276 THEN 3 ELSE NULL END,
-YesNo18Id = CASE WHEN p.PickListYes_No01Id = 97 THEN 1 WHEN p.PickListYes_No01Id = 98 THEN 2 WHEN p.PickListYes_No01Id = 276 THEN 3 ELSE NULL END
-FROM CourseYesNo AS cyn
-INNER JOIN Course AS c on cyn.CoursemId = c.Id
-INNER JOIN PickListOneToOne as p on p.CourseId = c.Id
-WHERE p.CourseId IS NOT NULL
-
-DELETE FROM PickListOneToOne
-WHERE CourseId IS NOT NULL
+DELETE FROM MetaSelectedField WHERE MetaAvailableFieldId in (2916, 2917, 2941)
 
 UPDATE MetaTemplate
 SET LastUpdatedDate = GETDATE()
 WHERE MetaTemplateId in (
-	SELECT Id FROM @Templates
+	SELECT Id FROM @Fields
 )
 
---SELECT PickListYes_No01Id, PickListYes_No02Id, * FROM PickListOneToOne
---WHERE ProgramId IS NOT NULL

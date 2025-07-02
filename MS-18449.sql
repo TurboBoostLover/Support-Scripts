@@ -59,7 +59,6 @@ FROM MetaTemplateType mtt
 WHERE mt.Active = 1 
     AND mtt.EntityTypeId = @entityTypeId
     AND mt.IsDraft = 0
-    AND mt.EndDate IS NULL
     AND mtt.Active = 1
     AND mtt.IsPresentationView = 0	--comment out if doing reports and forms
     AND mtt.ClientId = @clientId
@@ -136,7 +135,9 @@ SET QUOTED_IDENTIFIER OFF
 
 DECLARE @CSQL NVARCHAR(MAX) = "
 select c.Id as Value,
-s.SubjectCode + ' ' + c.CourseNumber + ' - ' + c.Title + ' (' + sa.Title + ')' as Text 
+s.SubjectCode + ' ' + c.CourseNumber + ' - ' + c.Title + ' (' + sa.Title + ')' as Text,
+s.Id AS filterValue,
+s.Id AS FilterValue
 from Course c
 inner join [Subject] s on s.Id = c.SubjectId
 inner join StatusAlias sa on sa.Id = c.StatusAliasId
@@ -146,12 +147,14 @@ and c.SubjectId = @subjectId
 and sa.StatusBaseId in(1, 2, 4, 6)
 UNION
 select c.Id as Value,
-s.SubjectCode + ' ' + c.CourseNumber + ' - ' + c.Title + ' (' + sa.Title + ')' as Text 
+s.SubjectCode + ' ' + c.CourseNumber + ' - ' + c.Title + ' (' + sa.Title + ')' as Text,
+s.Id AS filterValue,
+s.Id AS FilterValue
 from Course c
 inner join [Subject] s on s.Id = c.SubjectId
 inner join StatusAlias sa on sa.Id = c.StatusAliasId
 where c.Id in (
-	SELECT Requisite_CourseId FROM CourseRequisite WHERE CourseId = @EntityId
+	SELECT Requisite_CourseId FROM CourseRequisite WHERE Id = @pkIdValue
 )
 order by Text
 "
